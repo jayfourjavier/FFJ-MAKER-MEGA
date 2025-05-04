@@ -3,14 +3,10 @@
 #include "LimitSwitch.h"
 #include "RelayModule.h"
 #include "StepperController.h"  // Assuming this is the correct library for controlling stepper motors
+#include "MotorController.h"  // Assuming this is the correct library for controlling stepper motors
 
 
 
-// ======================= Pin Definitions for Chopper Motor =======================
-const byte chopperRen = 28;
-const byte chopperRpwm = 29;
-const byte chopperLen = 26;
-const byte chopperLpwm = 27;
 
 
 // ======================= Stepper + Limit Pins =======================
@@ -41,9 +37,17 @@ LimitSwitch mixerDownSwitch(mixerDownPin);
 LimitSwitch mixerUpSwitch(mixerUpPin);
 
 // ======================= Pump Control =======================
-const byte pumpEnaPin = 7;
-const byte pumpPwmPin = 8;
-byte speed = 200; // PWM value (0–255)
+const byte pumpEnaPin = 5;
+const byte pumpPwmPin = 6;
+const byte pumpSpeed = 25;
+
+const byte chopperEnaPin = 7;
+const byte chopperPwmPin = 8;
+const byte chopperSpeed = 50; // PWM value (0–255)
+
+
+MotorController chopperMotor(chopperEnaPin, chopperPwmPin);
+MotorController pumpMotor(pumpEnaPin, pumpPwmPin);
 
 // ======================= Stepper Controller Instances =======================
 StepperController sliderStepper(sliderPulPin, sliderDirPin, 1, false);  // 10ms interval, clockwise
@@ -69,56 +73,101 @@ void setupRelay(){
     Serial.println("[Setup] Relays initialized.");
 }
 
-void setupLimitSwitches(){
+void setupLimitSwitches() {
     // Initialize limit switches
     sliderHomeSwitch.init();
     sealerDownSwitch.init();
     sealerUpSwitch.init();
     mixerDownSwitch.init();
     mixerUpSwitch.init();
+    
     Serial.println("[Setup] Limit switches initialized.");
 }
 
-void setupStepperMotors(){
-    
+void setupStepperMotors() {
     // Initialize the stepper motors
     sliderStepper.init();
     sealerStepper.init();
     mixingToolStepper.init();
     mixerStepper.init();
+    
     Serial.println("[Setup] Stepper motors initialized.");
-
 }
 
-void resetSlider(){
+void setupMotors() {
+    // Initialize the motors
+    pumpMotor.init();
+    chopperMotor.init();
+    
+    Serial.println("[Setup] Motors initialized.");
+}
+
+void resetSlider() {
+    Serial.println("[Action] Resetting slider to home position.");
     sliderStepper.moveToLimit(-10000, sliderHomeSwitch);
+    Serial.println("[Action] Slider reset to home position.");
 }
 
-void moveMixerDown(){
+void moveMixerDown() {
+    Serial.println("[Action] Moving mixer down.");
     mixerStepper.moveToLimit(40000, mixerDownSwitch);
+    Serial.println("[Action] Mixer moved down.");
 }
 
-void moveMixerUp(){
+void moveMixerUp() {
+    Serial.println("[Action] Moving mixer up.");
     mixerStepper.moveToLimit(-40000, mixerUpSwitch);
+    Serial.println("[Action] Mixer moved up.");
 }
 
-void liftCover(){
+void liftCover() {
+    Serial.println("[Action] Lifting cover.");
     sealerStepper.setPulseInterval(1);
     sealerStepper.moveToLimit(10000, sealerUpSwitch);
+    Serial.println("[Action] Cover lifted.");
 }
 
-void putCover(){
+void putCover() {
+    Serial.println("[Action] Putting cover down.");
     sealerStepper.setPulseInterval(3);
     sealerStepper.moveToLimit(-10000, sealerDownSwitch);
+    Serial.println("[Action] Cover put down.");
 }
 
-void moveToMixer(){
+void moveToMixer() {
+    Serial.println("[Action] Moving to mixer position.");
     sliderStepper.moveTo(19000);
-
+    Serial.println("[Action] Moved to mixer position.");
 }
 
-void stir(){
+void stir() {
+    Serial.println("[Action] Stirring.");
     mixingToolStepper.moveTo(10000);
+    Serial.println("[Action] Stirring complete.");
+}
+
+void turnOnPump() {
+    Serial.println("[Action] Turning on pump.");
+    pumpMotor.turnOn(pumpSpeed);
+    Serial.println("[Action] Pump turned on.");
+}
+
+void turnOffPump() {
+    Serial.println("[Action] Turning off pump.");
+    pumpMotor.turnOff();
+    Serial.println("[Action] Pump turned off.");
+}
+
+void turnOnChopper() {
+    Serial.println("[Action] Turning on chopper.");
+    chopperMotor.turnOn(chopperSpeed);
+    Serial.println("[Action] Chopper turned on.");
+}
+
+void turnOffChopper() {
+    Serial.println("[Action] Turning off chopper.");
+    chopperMotor.turnOff();
+    Serial.println("[Action] Chopper turned off.");
 }
 
 void testLimitSwitch(){
@@ -145,6 +194,7 @@ void setup() {
     setupRelay();
     setupLimitSwitches();
     setupStepperMotors();
+    setupMotors();
 
 
     //turnOnCamera();
@@ -155,19 +205,22 @@ void setup() {
     //moveMixerDown();
     //moveMixerUp();
     //mixingToolStepper.moveTo(30000);
-    //liftCover();
-    //delay(3000);
+    liftCover();
+    delay(3000);
     //putCover();
     //resetSlider();
     //delay(3000);
     //moveToMixer();
     //stir();
 
-    pinMode(pumpEnaPin, OUTPUT);
-    pinMode(pumpPwmPin, OUTPUT);
+    //pinMode(pumpEnaPin, OUTPUT);
+    //pinMode(pumpPwmPin, OUTPUT);
 
-    digitalWrite(pumpEnaPin, LOW);
-    analogWrite(pumpPwmPin, 150);
+    //digitalWrite(pumpEnaPin, HIGH);
+    //analogWrite(pumpPwmPin, 150);
+
+    pumpMotor.turnOn(pumpSpeed);
+    //chopperMotor.turnOn(chopperSpeed);
 
 
 }
