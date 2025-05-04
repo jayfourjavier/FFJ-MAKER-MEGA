@@ -1,0 +1,162 @@
+#include <Arduino.h>
+#include <AccelStepper.h>
+#include <HX711.h>
+#include <TomIBT2.h>
+#include <Servo.h>
+#include <EEPROM.h>
+
+const byte isFermentingAddress = 0;
+bool isFermenting = false;
+
+bool eeproomTrue(byte _address) {
+  byte value = EEPROM.read(_address);
+  return (value == 1);
+}
+
+void eepromWrite(byte _address, bool value) {
+  if (value) {
+    EEPROM.write(_address, 1);  // Save TRUE as 1
+  } else {
+    EEPROM.write(_address, 0);  // Save FALSE as 0
+  }
+}
+
+// ========== CONFIGURABLE PARAMETERS ========== //
+// You can tune these values as needed
+
+// Slider Stepper Settings
+const unsigned long stepperSliderPulseInterval = 50;   // milliseconds between steps
+const float stepperSliderMaxSpeed = 1000.0;
+const float stepperSliderAcceleration = 500.0;
+
+// Sealer Stepper Settings
+const unsigned long stepperSealerPulseInterval = 50;
+const float stepperSealerMaxSpeed = 1000.0;
+const float stepperSealerAcceleration = 500.0;
+
+// Mixer Stepper Settings
+const unsigned long stepperMixerPulseInterval = 50;
+const float stepperMixerMaxSpeed = 1000.0;
+const float stepperMixerAcceleration = 500.0;
+
+// ========== PIN ASSIGNMENTS ========== //
+// HX711 Pins
+const byte loadCellDoutPin = 2;
+const byte loadCellSckPin  = 3;
+
+// Stepper Slider Pins
+const byte stepperSliderEnaPin = 26;
+const byte stepperSliderDirPin = 27;
+const byte stepperSliderPulPin = 28;
+const byte homeSliderPin       = 29;
+
+// Stepper Sealer Pins
+const byte stepperSealerEnaPin = 30;
+const byte stepperSealerDirPin = 31;
+const byte stepperSealerPulPin = 32;
+const byte homeSealerPin       = 33;
+
+// Stepper Mixer Pins
+const byte stepperMixerEnaPin = 34;
+const byte stepperMixerDirPin = 35;
+const byte stepperMixerPulPin = 36;
+const byte homeMixerPin       = 37;
+
+// IBT2 Motor Chopper Pins
+const byte motorChopperEnaRightPin = 38;
+const byte motorChopperEnaLeftPin  = 39;
+const byte motorChopperPwmRightPin = 40;
+const byte motorChopperPwmLeftPin  = 41;
+
+// IBT2 Motor Mixer Pins
+const byte motorMixingToolEnaRightPin = 42;
+const byte motorMixingToolEnaLeftPin  = 43;
+const byte motorMixingToolPwmRightPin = 44;
+const byte motorMixingToolPwmLeftPin  = 45;
+
+// IBT2 Motor Mixer Pins
+const byte molassesPumpEnaRightPin = 46;
+const byte molassesPumpEnaLeftPin  = 47;
+const byte molassesPumpPwmRightPin = 48;
+const byte molassesPumpPwmLeftPin  = 49;
+
+const byte molassesServoPin = 2;
+const byte molassesOpenAngle = 60;
+
+// ========== COMPONENTS ========== //
+HX711 loadCell;
+
+Servo molassesServo;
+
+AccelStepper stepperSlider(AccelStepper::DRIVER, stepperSliderPulPin, stepperSliderDirPin);
+AccelStepper stepperSealer(AccelStepper::DRIVER, stepperSealerPulPin, stepperSealerDirPin);
+AccelStepper stepperMixer(AccelStepper::DRIVER, stepperMixerPulPin, stepperMixerDirPin);
+
+TomIBT2 motorChopper(motorChopperPwmRightPin, motorChopperPwmLeftPin, motorChopperEnaRightPin, motorChopperEnaLeftPin);
+TomIBT2 motorMixer(motorMixingToolPwmRightPin, motorMixingToolPwmLeftPin, motorMixingToolEnaRightPin, motorMixingToolEnaLeftPin);
+TomIBT2 molassesPump(molassesPumpPwmRightPin, molassesPumpPwmLeftPin, molassesPumpEnaRightPin, molassesPumpEnaLeftPin);
+
+// ========== SETUP FUNCTIONS ========== //
+
+void setupStepper() {
+  // Stepper ENA Pins
+  pinMode(stepperSliderEnaPin, OUTPUT);
+  pinMode(stepperSealerEnaPin, OUTPUT);
+  pinMode(stepperMixerEnaPin, OUTPUT);
+  
+  // Disable motors to start (Active LOW for ENA)
+  digitalWrite(stepperSliderEnaPin, LOW);
+  digitalWrite(stepperSealerEnaPin, LOW);
+  digitalWrite(stepperMixerEnaPin, LOW);
+
+  // Stepper Configuration
+  stepperSlider.setMaxSpeed(stepperSliderMaxSpeed);
+  stepperSlider.setAcceleration(stepperSliderAcceleration);
+
+  stepperSealer.setMaxSpeed(stepperSealerMaxSpeed);
+  stepperSealer.setAcceleration(stepperSealerAcceleration);
+
+  stepperMixer.setMaxSpeed(stepperMixerMaxSpeed);
+  stepperMixer.setAcceleration(stepperMixerAcceleration);
+
+  // Initialize limit switches
+  pinMode(homeSliderPin, INPUT);
+  pinMode(homeSealerPin, INPUT);
+  pinMode(homeMixerPin, INPUT);
+}
+
+void setupLoadCell() {
+  // Initialize HX711 load cell
+  loadCell.begin(loadCellDoutPin, loadCellSckPin);
+  loadCell.set_scale(); // Load cell calibration factor
+  loadCell.tare(); // Zero the scale
+  Serial.println("Load cell initialized!");
+}
+
+// ========== SETUP ========== //
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Welcome to FFJ Maker");
+  molassesServo.attach(molassesServoPin);
+  molassesServo.write(0);     // Move servo to 0 degrees
+
+
+  // Initialize Load Cell
+  //setupLoadCell();
+
+  // Initialize Stepper Motors
+  //setupStepper();
+
+  // Additional initializations if needed
+}
+
+// ========== LOOP ========== //
+void loop() {
+  molassesServo.write(0);     // Move servo to 0 degrees
+  delay(1000);                // Wait for 1 second
+
+  molassesServo.write(molassesOpenAngle);    // Move servo to 90 degrees
+  delay(1000);                // Wait for 1 second
+
+}
+
