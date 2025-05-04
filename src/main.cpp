@@ -39,7 +39,7 @@ LimitSwitch mixerUpSwitch(mixerUpPin);
 // ======================= Pump Control =======================
 const byte pumpEnaPin = 5;
 const byte pumpPwmPin = 6;
-const byte pumpSpeed = 25;
+const byte pumpSpeed = 100;
 
 const byte chopperEnaPin = 7;
 const byte chopperPwmPin = 8;
@@ -102,29 +102,35 @@ void setupMotors() {
     Serial.println("[Setup] Motors initialized.");
 }
 
-void resetSlider() {
-    Serial.println("[Action] Resetting slider to home position.");
-    sliderStepper.moveToLimit(-10000, sliderHomeSwitch);
-    Serial.println("[Action] Slider reset to home position.");
-}
-
-void moveMixerDown() {
-    Serial.println("[Action] Moving mixer down.");
-    mixerStepper.moveToLimit(40000, mixerDownSwitch);
-    Serial.println("[Action] Mixer moved down.");
+void liftCover() {
+    Serial.println("[Action] Lifting cover.");
+    sealerStepper.setPulseInterval(1);
+    sealerStepper.moveToLimit(10000, sealerUpSwitch);
+    Serial.println("[Action] Cover lifted.");
+    delay(2000);
 }
 
 void moveMixerUp() {
     Serial.println("[Action] Moving mixer up.");
     mixerStepper.moveToLimit(-40000, mixerUpSwitch);
     Serial.println("[Action] Mixer moved up.");
+    delay(2000);
 }
 
-void liftCover() {
-    Serial.println("[Action] Lifting cover.");
-    sealerStepper.setPulseInterval(1);
-    sealerStepper.moveToLimit(10000, sealerUpSwitch);
-    Serial.println("[Action] Cover lifted.");
+void resetSlider() {
+    Serial.println("[Action] Resetting slider to home position.");
+    liftCover();
+    moveMixerUp();
+    sliderStepper.moveToLimit(-10000, sliderHomeSwitch);
+    Serial.println("[Action] Slider reset to home position.");
+    delay(2000);
+}
+
+void moveMixerDown() {
+    Serial.println("[Action] Moving mixer down.");
+    mixerStepper.moveToLimit(40000, mixerDownSwitch);
+    Serial.println("[Action] Mixer moved down.");
+    delay(2000);
 }
 
 void putCover() {
@@ -132,18 +138,24 @@ void putCover() {
     sealerStepper.setPulseInterval(3);
     sealerStepper.moveToLimit(-10000, sealerDownSwitch);
     Serial.println("[Action] Cover put down.");
+    delay(2000);
 }
 
-void moveToMixer() {
+void moveSliderToMixer() {
+    resetSlider();
     Serial.println("[Action] Moving to mixer position.");
-    sliderStepper.moveTo(19000);
+    sliderStepper.moveTo(18000);
     Serial.println("[Action] Moved to mixer position.");
+    delay(2000);
 }
+
+
 
 void stir() {
     Serial.println("[Action] Stirring.");
     mixingToolStepper.moveTo(10000);
     Serial.println("[Action] Stirring complete.");
+    delay(2000);
 }
 
 void turnOnPump() {
@@ -189,6 +201,29 @@ void testLimitSwitch(){
     delay(500); // Adjust delay as needed
 }
 
+void mixIngredients(){
+    moveSliderToMixer();
+    delay(1000);
+    moveMixerDown();
+    delay(1000);
+    stir();
+    delay(1000);
+    moveMixerUp();
+    delay(1000);
+}
+
+void moveSliderToSealer(){
+    resetSlider();
+    Serial.println("[Action] Moving to sealer position.");
+    sliderStepper.moveTo(50000);
+    Serial.println("[Action] Moved to sealer position.");
+    delay(2000);
+}
+
+void seal(){
+
+}
+
 void setup() {
     Serial.begin(9600);
     setupRelay();
@@ -219,8 +254,15 @@ void setup() {
     //digitalWrite(pumpEnaPin, HIGH);
     //analogWrite(pumpPwmPin, 150);
 
-    pumpMotor.turnOn(pumpSpeed);
+    //pumpMotor.turnOn(pumpSpeed);
     //chopperMotor.turnOn(chopperSpeed);
+
+    //turnOnPump();
+    //mixIngredients();
+    //moveSliderToSealer(); 40000+5000+5000
+    //sliderStepper.moveTo(5000);
+    //putCover();
+
 
 
 }
@@ -228,4 +270,6 @@ void setup() {
 void loop() {
     delay(100);
     //Serial.println(mixerDownSwitch.isTriggered());
+
+
 }
