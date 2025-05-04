@@ -161,8 +161,15 @@ void setup() {
     //resetSlider();
     //delay(3000);
     //moveToMixer();
-    stir();
-    
+    //stir();
+
+    pinMode(pumpEnaPin, OUTPUT);
+    pinMode(pumpPwmPin, OUTPUT);
+
+    digitalWrite(pumpEnaPin, LOW);
+    analogWrite(pumpPwmPin, 150);
+
+
 }
 
 void loop() {
