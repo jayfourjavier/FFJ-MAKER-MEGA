@@ -4,10 +4,48 @@
 #include "RelayModule.h"
 #include "StepperController.h"  // Assuming this is the correct library for controlling stepper motors
 #include "MotorController.h"  // Assuming this is the correct library for controlling stepper motors
+#include "Buzzer.h"  // Assuming this is the correct library for controlling stepper motors
 
+Buzzer buzzer();
+HX711 weighingScale;
+const byte hx711DatPin = 2;
+const byte hx711SckPin = 3;
+float calibrationFactor = 13.40f;  // Adjust after calibration +-20grams margin of error
 
+/**
+ * @brief Initializes the HX711 weighing scale.
+ * 
+ * Sets the data and clock pins, applies the calibration factor,
+ * and tares the scale to zero. Call this in setup().
+ */
+void setupWeighingScale() {
+    Serial.println(F("[INFO] Initializing weighing scale..."));
+    weighingScale.begin(hx711DatPin, hx711SckPin);
+    weighingScale.set_scale(calibrationFactor);
+    weighingScale.tare();  // Reset the scale to 0
+    delay(2000);
+    Serial.println(F("[INFO] Scale is tared. Ready to read weight."));
+}
 
-
+/**
+ * @brief Gets the weight reading from the HX711 in grams.
+ * 
+ * Takes the average of 20 samples. Make sure the scale has been tared and calibrated.
+ * 
+ * @return float The measured weight in grams. Returns -1.0 if scale is not ready.
+ */
+float getWeight() {
+    if (weighingScale.is_ready()) {
+        float weightGrams = weighingScale.get_units(20);
+        Serial.print(F("[DATA] Weight: "));
+        Serial.print(weightGrams, 2);
+        Serial.println(F(" g"));
+        return weightGrams;
+    } else {
+        Serial.println(F("[ERROR] Weighing scale not detected."));
+        return -1.0f;
+    }
+}
 
 // ======================= Stepper + Limit Pins =======================
 const byte sliderPulPin = 52, sliderDirPin = 53;
@@ -51,7 +89,7 @@ MotorController pumpMotor(pumpEnaPin, pumpPwmPin);
 
 // ======================= Stepper Controller Instances =======================
 StepperController sliderStepper(sliderPulPin, sliderDirPin, 1, false);  // 10ms interval, clockwise
-StepperController sealerStepper(sealerPulPin, sealerDirPin, 1, true);
+StepperController sealerStepper(sealerPulPin, sealerDirPin, 3, true);
 StepperController mixingToolStepper(mixingPulPin, mixingDirPin, 1, true);
 StepperController mixerStepper(mixerPulPin, mixerDirPin, 1, true);
 
@@ -66,6 +104,7 @@ void powerUpMotors(){
     motors.turnOn();
     delay(1000);
 }
+
 
 void setupRelay(){
     camera.init();
@@ -83,6 +122,7 @@ void setupLimitSwitches() {
     
     Serial.println("[Setup] Limit switches initialized.");
 }
+
 
 void setupStepperMotors() {
     // Initialize the stepper motors
@@ -121,7 +161,7 @@ void resetSlider() {
     Serial.println("[Action] Resetting slider to home position.");
     liftCover();
     moveMixerUp();
-    sliderStepper.moveToLimit(-10000, sliderHomeSwitch);
+    sliderStepper.moveToLimit(-58000, sliderHomeSwitch);
     Serial.println("[Action] Slider reset to home position.");
     delay(2000);
 }
@@ -135,7 +175,6 @@ void moveMixerDown() {
 
 void putCover() {
     Serial.println("[Action] Putting cover down.");
-    sealerStepper.setPulseInterval(3);
     sealerStepper.moveToLimit(-10000, sealerDownSwitch);
     Serial.println("[Action] Cover put down.");
     delay(2000);
@@ -148,8 +187,6 @@ void moveSliderToMixer() {
     Serial.println("[Action] Moved to mixer position.");
     delay(2000);
 }
-
-
 
 void stir() {
     Serial.println("[Action] Stirring.");
@@ -202,6 +239,7 @@ void testLimitSwitch(){
 }
 
 void mixIngredients(){
+    Serial.println("[Action] Mixing ingredients process started");
     moveSliderToMixer();
     delay(1000);
     moveMixerDown();
@@ -210,66 +248,62 @@ void mixIngredients(){
     delay(1000);
     moveMixerUp();
     delay(1000);
+    Serial.println("[Action] Mixing ingredients process is done");
+
 }
 
 void moveSliderToSealer(){
     resetSlider();
     Serial.println("[Action] Moving to sealer position.");
-    sliderStepper.moveTo(50000);
+    sliderStepper.moveTo(57000);
     Serial.println("[Action] Moved to sealer position.");
     delay(2000);
 }
 
 void seal(){
-
+    //resetSlider();
+    Serial.println("[Action] Sealing process started.");
+    moveSliderToSealer();
+    putCover();
+    Serial.println("[Action] Sealing process successful.");
 }
+
+
+
 
 void setup() {
     Serial.begin(9600);
+
     setupRelay();
     setupLimitSwitches();
     setupStepperMotors();
     setupMotors();
-
+    setupWeighingScale();
 
     //turnOnCamera();
     powerUpMotors();
 
-   //sliderStepper.moveTo(100);
-    //sliderStepper.moveToLimit(false, sliderHomeSwitch);
-    //moveMixerDown();
-    //moveMixerUp();
-    //mixingToolStepper.moveTo(30000);
-    liftCover();
-    delay(3000);
-    //putCover();
+    pinMode(A15, OUTPUT);
+
+    beepThreeTimes();
+
+    turnOnPump();
+    delay(10000);
+    turnOffPump();
+    
+
+
+
+
     //resetSlider();
-    //delay(3000);
-    //moveToMixer();
-    //stir();
-
-    //pinMode(pumpEnaPin, OUTPUT);
-    //pinMode(pumpPwmPin, OUTPUT);
-
-    //digitalWrite(pumpEnaPin, HIGH);
-    //analogWrite(pumpPwmPin, 150);
-
-    //pumpMotor.turnOn(pumpSpeed);
-    //chopperMotor.turnOn(chopperSpeed);
-
-    //turnOnPump();
     //mixIngredients();
-    //moveSliderToSealer(); 40000+5000+5000
-    //sliderStepper.moveTo(5000);
-    //putCover();
-
-
-
+    //seal();
 }
+
+
 
 void loop() {
+    //getWeight();  
     delay(100);
-    //Serial.println(mixerDownSwitch.isTriggered());
-
-
 }
+  
