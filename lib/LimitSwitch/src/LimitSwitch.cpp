@@ -32,3 +32,15 @@ void LimitSwitch::init() {
 bool LimitSwitch::isTriggered() {
     return digitalRead(pin) == HIGH;  // Return true if the switch is triggered (HIGH)
 }
+
+/**
+ * @brief Checks if the button is pressed.
+ *
+ * This function reads the state of the pin. If the pin is HIGH, it indicates that the limit switch
+ * has been triggered.
+ *
+ * @return true if the limit switch is triggered, false otherwise.
+ */
+bool LimitSwitch::isPressed() {
+    return digitalRead(pin) == HIGH;  // Return true if the switch is triggered (HIGH)
+}

@@ -38,7 +38,18 @@ public:
      *
      * @return true if the limit switch is triggered, false otherwise.
      */
+
     bool isTriggered();
+
+        /**
+     * @brief Checks if the button is pressed.
+     *
+     * This function reads the state of the limit switch and returns whether it is triggered.
+     * A limit switch is considered triggered if the pin reads HIGH.
+     *
+     * @return true if the limit switch is triggered, false otherwise.
+     */
+    bool isPressed();
 };
 
 #endif // LIMITSWITCH_H

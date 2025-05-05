@@ -2,11 +2,20 @@
 #include <HX711.h>       // For Load cell (not used in this code yet)
 #include "LimitSwitch.h"
 #include "RelayModule.h"
-#include "StepperController.h"  // Assuming this is the correct library for controlling stepper motors
-#include "MotorController.h"  // Assuming this is the correct library for controlling stepper motors
-#include "Buzzer.h"  // Assuming this is the correct library for controlling stepper motors
+#include "StepperController.h"  
+#include "MotorController.h"  
+#include "Buzzer.h"  
+#include "EEPROMStatus.h"  
+#include <EEPROM.h>
 
-Buzzer buzzer();
+bool hasStarted = false;
+bool isSliderAtHome = false;
+
+
+
+EEPROMStatus fermenting (0);
+
+Buzzer buzzer(A15);
 HX711 weighingScale;
 const byte hx711DatPin = 2;
 const byte hx711SckPin = 3;
@@ -47,6 +56,44 @@ float getWeight() {
     }
 }
 
+
+/**
+ * @brief Plays a short startup sequence (5 quick beeps).
+ */
+void beepStartSequence() {
+    buzzer.beep(5, 100, 100);
+    delay(1000);
+}
+
+/**
+ * @brief Plays an end sequence: long-short pattern (1 long + 3 short + 1 long).
+ */
+void beepEndSequence() {
+    buzzer.beep(1, 1000, 300);
+    buzzer.beep(3, 200, 150);
+    buzzer.beep(1, 1000, 0);
+    delay(1000);
+
+}
+
+/**
+ * @brief Plays a long triple beep for camera triggering or alert.
+ */
+void beepCamera() {
+    buzzer.beep(3, 2000, 500);
+    delay(1000);
+}
+
+/**
+ * @brief Plays a custom "power on" pattern: rising rhythm (short > medium > long).
+ */
+void powerOnBeep() {
+    buzzer.beep(1, 100, 100);   // short
+    buzzer.beep(1, 300, 150);   // medium
+    buzzer.beep(1, 600);        // long
+    delay(1000);
+}
+
 // ======================= Stepper + Limit Pins =======================
 const byte sliderPulPin = 52, sliderDirPin = 53;
 const byte sealerPulPin = 46, sealerDirPin = 47;
@@ -58,6 +105,11 @@ const byte sealerDownPin = 10;
 const byte sealerUpPin = 11;
 const byte mixerDownPin = 12;
 const byte mixerUpPin = 13;
+
+const byte startButtonPin = A0;
+const byte resetButtonPin = A1;
+const byte cameraButtonPin = A2;
+
 
 const byte cameraRelayPin = 44;
 const byte motorRelayPin = 45;
@@ -73,6 +125,9 @@ LimitSwitch sealerDownSwitch(sealerDownPin);
 LimitSwitch sealerUpSwitch(sealerUpPin);
 LimitSwitch mixerDownSwitch(mixerDownPin);
 LimitSwitch mixerUpSwitch(mixerUpPin);
+LimitSwitch startButton(startButtonPin);
+LimitSwitch resetButton(resetButtonPin);
+LimitSwitch cameraButton(cameraButtonPin);
 
 // ======================= Pump Control =======================
 const byte pumpEnaPin = 5;
@@ -96,12 +151,26 @@ StepperController mixerStepper(mixerPulPin, mixerDirPin, 1, true);
 void turnOnCamera(){
     Serial.println("Turning on camera");
     camera.turnOn();
-    delay(1000);
+    delay(3000);
+    beepCamera();
+}
+
+void turnOffCamera(){
+    Serial.println("Shutting down camera");
+    camera.turnOff();
+    delay(3000);
+    beepCamera();
 }
 
 void powerUpMotors(){
     Serial.println("Turning on motor power supply");
     motors.turnOn();
+    delay(1000);
+}
+
+void shutdownMotors(){
+    Serial.println("Turning off motor power supply");
+    motors.turnOff();
     delay(1000);
 }
 
@@ -119,6 +188,9 @@ void setupLimitSwitches() {
     sealerUpSwitch.init();
     mixerDownSwitch.init();
     mixerUpSwitch.init();
+    startButton.init();
+    resetButton.init();
+    cameraButton.init();
     
     Serial.println("[Setup] Limit switches initialized.");
 }
@@ -142,6 +214,10 @@ void setupMotors() {
     Serial.println("[Setup] Motors initialized.");
 }
 
+void setupBuzzer(){
+    buzzer.begin();
+}
+
 void liftCover() {
     Serial.println("[Action] Lifting cover.");
     sealerStepper.setPulseInterval(1);
@@ -158,44 +234,56 @@ void moveMixerUp() {
 }
 
 void resetSlider() {
+    beepStartSequence();
     Serial.println("[Action] Resetting slider to home position.");
     liftCover();
     moveMixerUp();
     sliderStepper.moveToLimit(-58000, sliderHomeSwitch);
     Serial.println("[Action] Slider reset to home position.");
+    beepEndSequence();
     delay(2000);
+
 }
 
 void moveMixerDown() {
+    beepStartSequence();
     Serial.println("[Action] Moving mixer down.");
     mixerStepper.moveToLimit(40000, mixerDownSwitch);
     Serial.println("[Action] Mixer moved down.");
+    beepEndSequence();
     delay(2000);
 }
 
 void putCover() {
+    beepStartSequence();
     Serial.println("[Action] Putting cover down.");
     sealerStepper.moveToLimit(-10000, sealerDownSwitch);
     Serial.println("[Action] Cover put down.");
     delay(2000);
+    beepEndSequence();
 }
 
 void moveSliderToMixer() {
+    beepStartSequence();
     resetSlider();
     Serial.println("[Action] Moving to mixer position.");
     sliderStepper.moveTo(18000);
     Serial.println("[Action] Moved to mixer position.");
+    beepEndSequence();
     delay(2000);
 }
 
 void stir() {
+    beepStartSequence();
     Serial.println("[Action] Stirring.");
     mixingToolStepper.moveTo(10000);
     Serial.println("[Action] Stirring complete.");
+    beepEndSequence();
     delay(2000);
 }
 
 void turnOnPump() {
+    buzzer.beep(1, 3000, 500);
     Serial.println("[Action] Turning on pump.");
     pumpMotor.turnOn(pumpSpeed);
     Serial.println("[Action] Pump turned on.");
@@ -205,9 +293,12 @@ void turnOffPump() {
     Serial.println("[Action] Turning off pump.");
     pumpMotor.turnOff();
     Serial.println("[Action] Pump turned off.");
+    buzzer.beep(1, 3000, 500);
+
 }
 
 void turnOnChopper() {
+    buzzer.beep(1, 3000, 500);
     Serial.println("[Action] Turning on chopper.");
     chopperMotor.turnOn(chopperSpeed);
     Serial.println("[Action] Chopper turned on.");
@@ -217,6 +308,7 @@ void turnOffChopper() {
     Serial.println("[Action] Turning off chopper.");
     chopperMotor.turnOff();
     Serial.println("[Action] Chopper turned off.");
+    buzzer.beep(1, 3000, 500);
 }
 
 void testLimitSwitch(){
@@ -239,6 +331,7 @@ void testLimitSwitch(){
 }
 
 void mixIngredients(){
+    beepStartSequence();
     Serial.println("[Action] Mixing ingredients process started");
     moveSliderToMixer();
     delay(1000);
@@ -247,63 +340,94 @@ void mixIngredients(){
     stir();
     delay(1000);
     moveMixerUp();
-    delay(1000);
     Serial.println("[Action] Mixing ingredients process is done");
+    beepEndSequence();
+    delay(2000);
 
 }
 
 void moveSliderToSealer(){
+    beepStartSequence();
     resetSlider();
     Serial.println("[Action] Moving to sealer position.");
     sliderStepper.moveTo(57000);
     Serial.println("[Action] Moved to sealer position.");
+    beepEndSequence();
     delay(2000);
 }
 
 void seal(){
     //resetSlider();
+    beepStartSequence();
     Serial.println("[Action] Sealing process started.");
     moveSliderToSealer();
     putCover();
     Serial.println("[Action] Sealing process successful.");
+    beepEndSequence();
+    delay(2000);
 }
-
-
 
 
 void setup() {
     Serial.begin(9600);
 
+    powerOnBeep();
     setupRelay();
     setupLimitSwitches();
     setupStepperMotors();
     setupMotors();
     setupWeighingScale();
+    setupBuzzer();
 
     //turnOnCamera();
-    powerUpMotors();
+    //powerUpMotors();
+    //liftCover();
 
-    pinMode(A15, OUTPUT);
+    //turnOnPump();
+    //delay(5000);
+    //turnOffPump();
 
-    beepThreeTimes();
+    //turnOnChopper();
+    //delay(5000);
+    //turnOffChopper();
+    //fermenting.setStatus(false);
 
-    turnOnPump();
-    delay(10000);
-    turnOffPump();
     
-
-
-
-
-    //resetSlider();
-    //mixIngredients();
-    //seal();
+    /*resetSlider();
+    mixIngredients();
+    seal();
+    turnOnCamera();
+    delay(3000);
+    turnOffCamera();
+    shutdownMotors();
+    */
+    
 }
 
+void controller(){
+    if (!fermenting.isPositive()){
+        if (startButton.isPressed() && !hasStarted){
+            Serial.println("Start button is pressed starting machine now");
+            hasStarted = true; 
+        } else {
+            Serial.println("AUTOFFJ is ready. Press \"START\" button to begin.");
+        }
 
+        if (hasStarted){
+            if(!isSliderAtHome){
+                resetSlider();
+            }
+        }
+    } else {
+        Serial.println("AUTOFFJ is already fermenting");
+    }
+}
 
 void loop() {
+
+    
     //getWeight();  
-    delay(100);
+    controller();
+    delay(10000);
 }
   
