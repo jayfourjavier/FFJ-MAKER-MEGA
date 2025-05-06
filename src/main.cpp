@@ -7,9 +7,78 @@
 #include "Buzzer.h"  
 #include "EEPROMStatus.h"  
 #include <EEPROM.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0X20,16, 2);
+
+/**
+ * @class TimerHelper
+ * @brief A simple one-shot timer that executes a callback function after a specified number of seconds.
+ */
+class TimerHelper {
+    private:
+        unsigned long startTime = 0;          ///< Stores the start time in milliseconds.
+        unsigned long durationMs = 0;         ///< Duration in milliseconds.
+        bool isRunning = false;               ///< Flag to track if the timer is currently active.
+        void (*callback)() = nullptr;         ///< Pointer to the callback function to execute when the timer expires.
+    
+    public:
+        /**
+         * @brief Construct a new TimerHelper object.
+         */
+        TimerHelper() {}
+    
+        /**
+         * @brief Start the timer with a given duration and a function to execute.
+         * 
+         * @param durationSeconds Duration of the timer in seconds.
+         * @param _callback Function to execute after the timer ends.
+         */
+        void timerStart(unsigned int durationSeconds, void (*_callback)()) {
+            startTime = millis();
+            durationMs = durationSeconds * 1000UL;
+            callback = _callback;
+            isRunning = true;
+        }
+    
+        /**
+         * @brief Call this in the main loop to check if the timer has expired and execute the callback.
+         */
+        void timerLoop() {
+            if (isRunning && (millis() - startTime >= durationMs)) {
+                isRunning = false;
+                if (callback != nullptr) {
+                    callback();
+                }
+            }
+        }
+    
+        /**
+         * @brief Cancel the timer before it completes.
+         */
+        void timerCancel() {
+            isRunning = false;
+        }
+    
+        /**
+         * @brief Check if the timer is currently active.
+         * 
+         * @return true If the timer is running.
+         * @return false If the timer is not running.
+         */
+        bool isActive() const {
+            return isRunning;
+        }
+};
+
+TimerHelper cameraTimer;
+
 
 bool hasStarted = false;
 bool isSliderAtHome = false;
+bool isCameraRunning = false;
+const byte cameraWebserverDuration = 5;
 
 
 
@@ -106,9 +175,9 @@ const byte sealerUpPin = 11;
 const byte mixerDownPin = 12;
 const byte mixerUpPin = 13;
 
-const byte startButtonPin = A0;
-const byte resetButtonPin = A1;
-const byte cameraButtonPin = A2;
+const byte startButtonPin = A0;     //3
+const byte resetButtonPin = A1;     //1
+const byte cameraButtonPin = A2;    //2
 
 
 const byte cameraRelayPin = 44;
@@ -368,41 +437,75 @@ void seal(){
 }
 
 
-void setup() {
-    Serial.begin(9600);
 
-    powerOnBeep();
-    setupRelay();
-    setupLimitSwitches();
-    setupStepperMotors();
-    setupMotors();
-    setupWeighingScale();
-    setupBuzzer();
 
-    //turnOnCamera();
-    //powerUpMotors();
-    //liftCover();
+bool checkLcd() {
+    bool _isDetected = false;
+    byte error, address;
+  
+    for (address = 1; address < 127; address++) {
+      Wire.beginTransmission(address);
+      error = Wire.endTransmission();
+  
+      if (error == 0) {
+        Serial.print("I2C device found at address 0x");
+        if (address < 16)
+          Serial.print("0");
+        Serial.println(address, HEX);
+  
+        if (address == 0x20) {
+          Serial.println("✅ LCD at 0x20 is detected.");
+          _isDetected = true;
+        }
+      }
+    }
+  
+    if (!_isDetected) {
+      Serial.println("❌ LCD not found at 0x20.");
+    }
+  
+    delay(1000);
+    return _isDetected;
+  }
 
-    //turnOnPump();
-    //delay(5000);
-    //turnOffPump();
+/**
+ * @brief Displays two lines of text centered on a 16x2 LCD.
+ * 
+ * @param line1 The first line of text.
+ * @param line2 The second line of text.
+ * @param autoClear Optional. If true, clears the display after 2 seconds. Default is false.
+ */
+void lcdPrint(String line1, String line2, bool autoClear = false) {
+    lcd.clear();
 
-    //turnOnChopper();
-    //delay(5000);
-    //turnOffChopper();
-    //fermenting.setStatus(false);
+    int len1 = line1.length();
+    int len2 = line2.length();
+    int pad1 = max((16 - len1) / 2, 0);
+    int pad2 = max((16 - len2) / 2, 0);
 
-    
-    /*resetSlider();
-    mixIngredients();
-    seal();
-    turnOnCamera();
-    delay(3000);
-    turnOffCamera();
-    shutdownMotors();
-    */
-    
+    lcd.setCursor(pad1, 0);
+    lcd.print(line1);
+    lcd.setCursor(pad2, 1);
+    lcd.print(line2);
+
+    if (autoClear) {
+        delay(2000);
+        lcd.clear();
+    }
 }
+
+  
+void setupLcd() {
+    lcd.init();
+    lcd.backlight();
+
+    for (int i = 0; i < 3; i++) {
+        lcdPrint("WELCOME TO", "AUTO FFJ", true);
+        delay(1000);
+    }
+}
+  
+  
 
 void controller(){
     if (!fermenting.isPositive()){
@@ -421,13 +524,90 @@ void controller(){
     } else {
         Serial.println("AUTOFFJ is already fermenting");
     }
+
+
 }
+
+void setup() {
+    Serial.begin(9600);
+    Wire.begin();
+
+    powerOnBeep();
+    setupRelay();
+    setupLimitSwitches();
+    setupStepperMotors();
+    setupMotors();
+    setupWeighingScale();
+    setupBuzzer();
+    setupLcd();
+
+    //turnOnCamera();
+    //powerUpMotors();
+    //liftCover();
+
+    //turnOnPump();
+    //delay(5000);
+    //turnOffPump();
+
+    //turnOnChopper();
+    //delay(5000);
+    //turnOffChopper();
+    //fermenting.setStatus(false);
+
+
+
+    
+    //resetSlider();
+    /*
+    mixIngredients();
+    seal();
+    turnOnCamera();
+    delay(3000);
+    turnOffCamera();
+    shutdownMotors();
+    */
+
+
+
+    
+}
+
+void loopCamera(){
+    //Camera turning on or off, 3 long buzzer beeps
+    if (cameraButton.isPressed()){
+        if(!isCameraRunning){
+            Serial.println("Camera button is pressed");
+            lcdPrint("Camera webserver", "is now running.", true);
+            turnOnCamera();
+            cameraTimer.timerStart(cameraWebserverDuration * 60, turnOffCamera);
+            Serial.println("Camera webserver is turned on for 300 seconds");
+            isCameraRunning = true;
+
+        } else {
+            Serial.println("Camera button is pressed");
+            lcdPrint("Camera webserver", "is closed.", true);
+            turnOffCamera();
+            cameraTimer.timerCancel();
+            isCameraRunning = false;
+        }  
+    }
+    cameraTimer.timerLoop(); //automatically turn off camera for specified time to save power and avoid overheating of flash light.
+}
+
 
 void loop() {
 
+    loopCamera();
     
     //getWeight();  
-    controller();
-    delay(10000);
+    //controller();
+    //checkLcd();
+
+    Serial.print(startButton.isPressed());
+    Serial.print(resetButton.isPressed());
+    Serial.println(cameraButton.isPressed());
+    delay(100);
+
+
 }
   
