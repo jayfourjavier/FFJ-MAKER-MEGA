@@ -192,6 +192,14 @@ void resetEeprom(){
     mixtureSealed.setStatus(false);
 }
 
+void setEeprom() {
+    fermenting.setStatus(true);
+    bananaAdded.setStatus(true);
+    molassesAdded.setStatus(true);
+    mixtureMixed.setStatus(true);
+    mixtureSealed.setStatus(true);
+}
+
 
 
 Buzzer buzzer(A15);
@@ -599,6 +607,26 @@ bool checkLcd() {
     return _isDetected;
   }
 
+void testEeprom(){
+    // Read states (1 = positive, 0 = negative)
+    byte s1 = fermenting.isPositive();
+    byte s2 = bananaAdded.isPositive();
+    byte s3 = molassesAdded.isPositive();
+    byte s4 = mixtureSealed.isPositive();
+    byte s5 = mixtureSealed.isPositive();
+
+    // Print as a 5-digit binary number
+    Serial.print("EEPROM STATES: ");
+    Serial.print(s1);
+    Serial.print(s2);
+    Serial.print(s3);
+    Serial.print(s4);
+    Serial.println(s5);
+
+    delay(500); // Adjust delay as needed
+    
+}
+
 
   
 
@@ -617,7 +645,7 @@ void setup() {
     setupLcd();
     setupRtc();
     powerUpMotors();
-    //fermenting.setStatus(false);
+    //fermenting.setStatus(false); 
     resetEeprom();
  
 
@@ -751,6 +779,7 @@ void loop() {
     
     //testLimitSwitch();
     //testRtc();
+    //testEeprom();
     //checkLcd();
 
     if (startButton.isPressed()){
