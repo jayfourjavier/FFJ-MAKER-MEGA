@@ -295,9 +295,9 @@ const byte sealerUpPin = 11;
 const byte mixerDownPin = 4;
 const byte mixerUpPin = 13;
 
-const byte startButtonPin = A0;     //3
-const byte resetButtonPin = A1;     //1
-const byte cameraButtonPin = A2;    //2
+const byte startButtonPin = A0;     //RED
+const byte resetButtonPin = A1;     //WHITE
+const byte cameraButtonPin = A2;    //YELLO
 
 
 const byte cameraRelayPin = 44;
@@ -418,7 +418,7 @@ void liftCover() {
 }
 
 void moveMixerUp() {
-    Serial.println("[Action] Moving mixer up.");
+    Serial.println("[Action] Moving mixer up.") ;
     lcdPrint("CURRENT ACTIVITY","MOVING MIXER UP");
     mixerStepper.moveToLimit(-35000, mixerUpSwitch);
     Serial.println("[Action] Mixer moved up.");
