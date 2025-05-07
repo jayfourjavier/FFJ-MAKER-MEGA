@@ -9,8 +9,101 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <RTClib.h>
+
+RTC_DS3231 rtc;
+DateTime nowDateTime;
+DateTime startDateTime;
+bool isRtcReady = false;
+
+
+void setupRtc()
+{
+    Serial.println("Setting up RTC");
+    if (!rtc.begin()) {
+        Serial.println("RTC failed");
+        isRtcReady = false;
+    } else {
+        Serial.println("RTC is ready");
+        isRtcReady = true;
+        if (rtc.lostPower()) {
+            Serial.println("RTC lost power, setting time to compile time");
+            rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        }
+    } 
+}
+
+void testRtc()
+{
+    nowDateTime = rtc.now();
+    Serial.print(nowDateTime .year(), DEC);
+    Serial.print('/');
+    Serial.print(nowDateTime.month(), DEC);
+    Serial.print('/');
+    Serial.print(nowDateTime.day(), DEC);
+    Serial.print(" ");
+    Serial.print(nowDateTime.hour(), DEC);
+    Serial.print(':');
+    Serial.print(nowDateTime.minute(), DEC);
+    Serial.print(':');
+    Serial.println(nowDateTime.second(), DEC);
+
+    delay(1000);
+}
+
+/*
+    Returns the current date and time as a string
+*/
+String timestamp(DateTime _now){
+    String timeStr = String(_now.year()) + "/" + 
+                    String(_now.month()) + "/" + 
+                    String(_now.day()) + " " +
+                    String(_now.hour()) + ":" + 
+                    String(_now.minute()) + ":" + 
+                    String(_now.second());
+    return timeStr;
+}
 
 LiquidCrystal_I2C lcd(0X20,16, 2);
+/**
+ * @brief Displays two lines of text centered on a 16x2 LCD.
+ * 
+ * @param line1 The first line of text.
+ * @param line2 The second line of text.
+ * @param autoClear Optional. If true, clears the display after 5 seconds. Default is false.
+ */
+void lcdPrint(String line1, String line2, bool autoClear = false) {
+    lcd.clear();
+
+    int len1 = line1.length();
+    int len2 = line2.length();
+    int pad1 = max((16 - len1) / 2, 0);
+    int pad2 = max((16 - len2) / 2, 0);
+
+    lcd.setCursor(pad1, 0);
+    lcd.print(line1);
+    lcd.setCursor(pad2, 1);
+    lcd.print(line2);
+
+    if (autoClear) {
+        delay(5000);
+        lcd.clear();
+    }
+}
+
+  
+void setupLcd() {
+    lcd.init();
+    lcd.backlight();
+
+    for (int i = 0; i < 3; i++) {
+        lcdPrint("WELCOME TO", "AUTO FFJ", false);
+        delay(2000);
+    }
+
+    lcdPrint("WELCOME TO", "AUTO FFJ", true);
+
+}
 
 /**
  * @class TimerHelper
@@ -80,9 +173,26 @@ bool isSliderAtHome = false;
 bool isCameraRunning = false;
 const byte cameraWebserverDuration = 5;
 
+bool processStarted = false;
+bool processCompleted = false;
+
 
 
 EEPROMStatus fermenting (0);
+EEPROMStatus bananaAdded (1);
+EEPROMStatus molassesAdded (2);
+EEPROMStatus mixtureMixed (3);
+EEPROMStatus mixtureSealed (4);
+
+void resetEeprom(){
+    fermenting.setStatus(false);
+    bananaAdded.setStatus(false);
+    molassesAdded.setStatus(false);
+    mixtureMixed.setStatus(false);
+    mixtureSealed.setStatus(false);
+}
+
+
 
 Buzzer buzzer(A15);
 HX711 weighingScale;
@@ -172,7 +282,7 @@ const byte mixerPulPin  = 50, mixerDirPin  = 51;
 const byte sliderHomePin = 9;
 const byte sealerDownPin = 10;
 const byte sealerUpPin = 11;
-const byte mixerDownPin = 12;
+const byte mixerDownPin = 4;
 const byte mixerUpPin = 13;
 
 const byte startButtonPin = A0;     //3
@@ -205,7 +315,7 @@ const byte pumpSpeed = 100;
 
 const byte chopperEnaPin = 7;
 const byte chopperPwmPin = 8;
-const byte chopperSpeed = 50; // PWM value (0–255)
+const byte chopperSpeed = 40; // PWM value (0–255)
 
 
 MotorController chopperMotor(chopperEnaPin, chopperPwmPin);
@@ -214,7 +324,7 @@ MotorController pumpMotor(pumpEnaPin, pumpPwmPin);
 // ======================= Stepper Controller Instances =======================
 StepperController sliderStepper(sliderPulPin, sliderDirPin, 1, false);  // 10ms interval, clockwise
 StepperController sealerStepper(sealerPulPin, sealerDirPin, 3, true);
-StepperController mixingToolStepper(mixingPulPin, mixingDirPin, 1, true);
+StepperController mixingToolStepper(mixingPulPin, mixingDirPin, 3, true);
 StepperController mixerStepper(mixerPulPin, mixerDirPin, 1, true);
 
 void turnOnCamera(){
@@ -289,16 +399,20 @@ void setupBuzzer(){
 
 void liftCover() {
     Serial.println("[Action] Lifting cover.");
+    lcdPrint("CURRENT ACTIVITY","LIFTING COVER");
     sealerStepper.setPulseInterval(1);
     sealerStepper.moveToLimit(10000, sealerUpSwitch);
+    lcdPrint("CURRENT ACTIVITY","COVER IS LIFTED");
     Serial.println("[Action] Cover lifted.");
     delay(2000);
 }
 
 void moveMixerUp() {
     Serial.println("[Action] Moving mixer up.");
-    mixerStepper.moveToLimit(-40000, mixerUpSwitch);
+    lcdPrint("CURRENT ACTIVITY","MOVING MIXER UP");
+    mixerStepper.moveToLimit(-35000, mixerUpSwitch);
     Serial.println("[Action] Mixer moved up.");
+    lcdPrint("CURRENT ACTIVITY","MIXER RESET DONE");
     delay(2000);
 }
 
@@ -307,8 +421,10 @@ void resetSlider() {
     Serial.println("[Action] Resetting slider to home position.");
     liftCover();
     moveMixerUp();
+    lcdPrint("CURRENT ACTIVITY","RESETTING SLIDER");
     sliderStepper.moveToLimit(-58000, sliderHomeSwitch);
     Serial.println("[Action] Slider reset to home position.");
+    lcdPrint("CURRENT ACTIVITY","SLIDER RESET DONE");
     beepEndSequence();
     delay(2000);
 
@@ -317,8 +433,11 @@ void resetSlider() {
 void moveMixerDown() {
     beepStartSequence();
     Serial.println("[Action] Moving mixer down.");
-    mixerStepper.moveToLimit(40000, mixerDownSwitch);
+    lcdPrint("CURRENT ACTIVITY","DEPLOYING MIXER");
+    //mixerStepper.moveToLimit(40000, mixerDownSwitch);
+    mixerStepper.moveTo(37000);
     Serial.println("[Action] Mixer moved down.");
+    lcdPrint("CURRENT ACTIVITY","MIXER DEPLOYED");
     beepEndSequence();
     delay(2000);
 }
@@ -326,8 +445,10 @@ void moveMixerDown() {
 void putCover() {
     beepStartSequence();
     Serial.println("[Action] Putting cover down.");
+    lcdPrint("CURRENT ACTIVITY","SEALING");
     sealerStepper.moveToLimit(-10000, sealerDownSwitch);
     Serial.println("[Action] Cover put down.");
+    lcdPrint("CURRENT ACTIVITY","SEALED");
     delay(2000);
     beepEndSequence();
 }
@@ -336,6 +457,7 @@ void moveSliderToMixer() {
     beepStartSequence();
     resetSlider();
     Serial.println("[Action] Moving to mixer position.");
+    lcdPrint("CURRENT ACTIVITY","MOVING TO MIXER");
     sliderStepper.moveTo(18000);
     Serial.println("[Action] Moved to mixer position.");
     beepEndSequence();
@@ -345,6 +467,7 @@ void moveSliderToMixer() {
 void stir() {
     beepStartSequence();
     Serial.println("[Action] Stirring.");
+    lcdPrint("CURRENT ACTIVITY","STIR MIXTURE");
     mixingToolStepper.moveTo(10000);
     Serial.println("[Action] Stirring complete.");
     beepEndSequence();
@@ -354,6 +477,7 @@ void stir() {
 void turnOnPump() {
     buzzer.beep(1, 3000, 500);
     Serial.println("[Action] Turning on pump.");
+    lcdPrint("CURRENT ACTIVITY","PUMPING MOLASSES");
     pumpMotor.turnOn(pumpSpeed);
     Serial.println("[Action] Pump turned on.");
 }
@@ -362,19 +486,21 @@ void turnOffPump() {
     Serial.println("[Action] Turning off pump.");
     pumpMotor.turnOff();
     Serial.println("[Action] Pump turned off.");
+    lcdPrint("CURRENT ACTIVITY","PUMP TURNED OFF");
     buzzer.beep(1, 3000, 500);
-
 }
 
 void turnOnChopper() {
     buzzer.beep(1, 3000, 500);
     Serial.println("[Action] Turning on chopper.");
+    lcdPrint("CURRENT ACTIVITY","CHOPPER TURNED ON");
     chopperMotor.turnOn(chopperSpeed);
     Serial.println("[Action] Chopper turned on.");
 }
 
 void turnOffChopper() {
     Serial.println("[Action] Turning off chopper.");
+    lcdPrint("CURRENT ACTIVITY","CHOPPER TURNED OFF");
     chopperMotor.turnOff();
     Serial.println("[Action] Chopper turned off.");
     buzzer.beep(1, 3000, 500);
@@ -410,6 +536,7 @@ void mixIngredients(){
     delay(1000);
     moveMixerUp();
     Serial.println("[Action] Mixing ingredients process is done");
+    lcdPrint("CURRENT ACTIVITY", "MIXING DONE");
     beepEndSequence();
     delay(2000);
 
@@ -419,8 +546,10 @@ void moveSliderToSealer(){
     beepStartSequence();
     resetSlider();
     Serial.println("[Action] Moving to sealer position.");
+    lcdPrint("CURRENT ACTIVITY","MOVING TO SEALER");
     sliderStepper.moveTo(57000);
     Serial.println("[Action] Moved to sealer position.");
+    lcdPrint("CURRENT ACTIVITY","ARRIVED AT SEALER");
     beepEndSequence();
     delay(2000);
 }
@@ -429,9 +558,11 @@ void seal(){
     //resetSlider();
     beepStartSequence();
     Serial.println("[Action] Sealing process started.");
+    lcdPrint("CURRENT ACTIVITY","SEALING STARTED");
     moveSliderToSealer();
     putCover();
     Serial.println("[Action] Sealing process successful.");
+    lcdPrint("CURRENT ACTIVITY","SEALING IS DONE");
     beepEndSequence();
     delay(2000);
 }
@@ -468,65 +599,9 @@ bool checkLcd() {
     return _isDetected;
   }
 
-/**
- * @brief Displays two lines of text centered on a 16x2 LCD.
- * 
- * @param line1 The first line of text.
- * @param line2 The second line of text.
- * @param autoClear Optional. If true, clears the display after 2 seconds. Default is false.
- */
-void lcdPrint(String line1, String line2, bool autoClear = false) {
-    lcd.clear();
-
-    int len1 = line1.length();
-    int len2 = line2.length();
-    int pad1 = max((16 - len1) / 2, 0);
-    int pad2 = max((16 - len2) / 2, 0);
-
-    lcd.setCursor(pad1, 0);
-    lcd.print(line1);
-    lcd.setCursor(pad2, 1);
-    lcd.print(line2);
-
-    if (autoClear) {
-        delay(2000);
-        lcd.clear();
-    }
-}
 
   
-void setupLcd() {
-    lcd.init();
-    lcd.backlight();
 
-    for (int i = 0; i < 3; i++) {
-        lcdPrint("WELCOME TO", "AUTO FFJ", true);
-        delay(1000);
-    }
-}
-  
-  
-
-void controller(){
-    if (!fermenting.isPositive()){
-        if (startButton.isPressed() && !hasStarted){
-            Serial.println("Start button is pressed starting machine now");
-            hasStarted = true; 
-        } else {
-            Serial.println("AUTOFFJ is ready. Press \"START\" button to begin.");
-        }
-
-        if (hasStarted){
-            if(!isSliderAtHome){
-                resetSlider();
-            }
-        }
-    } else {
-        Serial.println("AUTOFFJ is already fermenting");
-    }
-
-
-}
 
 void setup() {
     Serial.begin(9600);
@@ -540,9 +615,23 @@ void setup() {
     setupWeighingScale();
     setupBuzzer();
     setupLcd();
+    setupRtc();
+    powerUpMotors();
+    //fermenting.setStatus(false);
+    resetEeprom();
+ 
+
+
+
+    if (!fermenting.isPositive()){
+        lcdPrint("NOT FERMENTING", "INITIALIZING");
+        resetSlider();
+    } else {
+        lcdPrint("FERMENTING", "WAIT FOR DAYS");
+    }
+
 
     //turnOnCamera();
-    //powerUpMotors();
     //liftCover();
 
     //turnOnPump();
@@ -552,22 +641,18 @@ void setup() {
     //turnOnChopper();
     //delay(5000);
     //turnOffChopper();
-    //fermenting.setStatus(false);
+    //moveMixerDown();
 
+    //mixIngredients();
+    //seal();
+    //fermenting.setStatus(true);
 
-
-    
+    //turnOnCamera();
+    //delay(3000);
+    //turnOffCamera();
+    //shutdownMotors();
     //resetSlider();
-    /*
-    mixIngredients();
-    seal();
-    turnOnCamera();
-    delay(3000);
-    turnOffCamera();
-    shutdownMotors();
-    */
-
-
+    //mixIngredients();
 
     
 }
@@ -594,18 +679,113 @@ void loopCamera(){
     cameraTimer.timerLoop(); //automatically turn off camera for specified time to save power and avoid overheating of flash light.
 }
 
+void addBanana() {
+    if (!bananaAdded.isPositive()) {
+        lcdPrint("CHOPPER RUNNING", "INSERT BANANA");
+        weighingScale.tare();  // reset to 0
+        float _currentBananaWeight = 0;
+
+        while (_currentBananaWeight < 500) {  // keep running until at least 500g
+            turnOnChopper();
+            _currentBananaWeight = getWeight();
+            String _weightString = "WEIGHT: " + String(_currentBananaWeight, 2) + "g";
+            lcdPrint("ADDING BANANA", _weightString);
+            delay(500);  // optional: small delay to avoid flickering
+        }
+
+        turnOffChopper();
+        bananaAdded.setStatus(true);
+    }
+}
+
+
+void addMolasses() {
+    if (bananaAdded.isPositive()) {
+        if (!molassesAdded.isPositive()) {
+            lcdPrint("PUMP RUNNING", "ADD MOLASSES");
+            weighingScale.tare();  // reset scale to zero
+            float _currentMolassesWeight = 0;
+
+            while (_currentMolassesWeight < 500) {  // run until weight reaches 500g
+                turnOnPump();
+                _currentMolassesWeight = getWeight();
+                String _weightString = "WEIGHT: " + String(_currentMolassesWeight, 2) + "g";
+                lcdPrint("ADDING MOLASSES", _weightString);
+                delay(500);
+            }
+
+            turnOffPump();
+            molassesAdded.setStatus(true);
+        }
+    }
+}
+
+
+void mix(){
+    if(molassesAdded.isPositive()){
+        if(!mixtureMixed.isPositive()){
+            mixIngredients();
+            mixtureMixed.setStatus(true);
+        }
+    }
+}
+
+void sealMixture(){
+    if(mixtureMixed.isPositive()){
+        if(!mixtureSealed.isPositive()){
+            seal();
+            mixtureSealed.setStatus(true);
+        }
+    }
+}
+
+void emergencyStop(){
+    if(resetButton.isPressed() && processStarted){
+        Serial.println("Emergency stop. Shutting down machine now");
+    }
+}
+
 
 void loop() {
-
     loopCamera();
     
-    //getWeight();  
-    //controller();
+    //testLimitSwitch();
+    //testRtc();
     //checkLcd();
 
-    Serial.print(startButton.isPressed());
-    Serial.print(resetButton.isPressed());
-    Serial.println(cameraButton.isPressed());
+    if (startButton.isPressed()){
+        Serial.println("Start button is pressed");
+        if(!processStarted){
+            processStarted = true;
+            Serial.println("Process started");
+        } else {
+            Serial.println("Process is already going on.");
+        }
+    }
+
+    if(processStarted){
+        //turn on chopper
+        addBanana();
+        addMolasses();
+        mix();
+    } else {
+        lcdPrint("MACHINE READY.","PRESS START");
+    }
+
+    if (resetButton.isPressed()){
+        Serial.println("Start button is pressed");
+        if (processStarted){
+            Serial.println("Process stopped");
+            turnOffCamera();
+            turnOffChopper();
+        } 
+
+        if (processCompleted){
+            Serial.println("Resetting machine now");
+        }
+    }
+    //Serial.print(".");
+
     delay(100);
 
 
