@@ -16,6 +16,8 @@ DateTime nowDateTime;
 DateTime startDateTime;
 bool isRtcReady = false;
 
+//TRY EDIT
+
 
 void setupRtc()
 {
@@ -681,8 +683,6 @@ void setup() {
     //shutdownMotors();
     //resetSlider();
     //mixIngredients();
-
-    
 }
 
 void loopCamera(){
